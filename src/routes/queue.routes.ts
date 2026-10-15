@@ -1,6 +1,9 @@
 import { Router } from "express";
+import { queueController } from "../controllers/queue.controller";
 
-// Feature 3
 const router = Router();
+
+router.post("/:storeId/queue", queueController.join);
+router.get("/:storeId/queue", queueController.getStatus);
 
 export default router;

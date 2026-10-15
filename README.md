@@ -150,7 +150,52 @@ Las pruebas no necesitan MongoDB: mockean la capa de repositorio.
 
 URL base: `http://localhost:3000/api`
 
-### `POST /api/stores` — Registrar una empresa
+### Consultar tiendas
+
+**Método** GET<br>
+**Endpoint** `/api/stores`<br>
+**Propósito** Consultar las tiendas registradas.<br>
+**Request** Sin body.<br>
+**Response** Lista de tiendas en formato JSON.<br>
+**HTTP** `200 OK`, `500 Internal Server Error`
+
+### POST /api/stores — Registrar una empresa
+
+**Método** POST<br>
+**Endpoint** `/api/stores`<br>
+**Propósito** Registrar una nueva tienda.<br>
+**Request** Body JSON con `name` obligatorio y los campos opcionales `description`, `address`, `phone` y `email`.<br>
+**Response** Documento de la tienda creada en formato JSON.<br>
+**HTTP** `201 Created`, `400 Bad Request`, `409 Conflict`, `500 Internal Server Error`
+
+
+### Entrar a la cola de una tienda
+
+**Método** POST<br>
+**Endpoint** `/api/stores/:storeId/queue`<br>
+**Propósito** Solicitar un turno para una tienda específica.<br>
+**Request** Sin body. El parámetro `storeId` corresponde al identificador de la tienda.<br>
+**Response** Turno creado con su número, tienda, estado y fecha de creación en formato JSON.<br>
+**HTTP** `201 Created`, `400 Bad Request`, `404 Not Found`, `500 Internal Server Error`
+
+### Consultar el estado de la cola
+
+**Método** GET<br>
+**Endpoint** `/api/stores/:storeId/queue`<br>
+**Propósito** Consultar el último turno generado y la cantidad de turnos en espera de una tienda.<br>
+**Request** Sin body. El parámetro `storeId` corresponde al identificador de la tienda.<br>
+**Response** Estado de la cola en formato JSON, con `storeId`, `lastTicketNumber` y `waitingCount`.<br>
+**HTTP** `200 OK`, `400 Bad Request`, `404 Not Found`, `500 Internal Server Error`
+
+**Ejemplo de respuesta:**
+
+```json
+{
+  "storeId": "665f1c2e8b3a4d0012345678",
+  "lastTicketNumber": 8,
+  "waitingCount": 3
+}
+```
 
 **Body (JSON):**
 
