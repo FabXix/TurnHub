@@ -1,180 +1,218 @@
 # TurnHub
 
-TurnHub es una API backend para gestionar tiendas, filas de espera y turnos de atención. La aplicación está pensada para permitir a los clientes consultar sucursales y a los administradores administrar la cola de atención en tiempo real.
+API backend para gestionar tiendas, filas de espera y turnos de atención. Pensada para que los clientes consulten sucursales y soliciten turnos, y para que los administradores gestionen la fila.
 
-## Diagrama general
+Proyecto integrador del curso **Tecnologías de desarrollo en el servidor**.
+
+**Equipo:** Emilio Segura, Yeshua Miranda, Fabricio Rodríguez
+
+## Estado del proyecto (primera entrega)
+
+| Feature | Descripción | Estado |
+| --- | --- | --- |
+| 1 | Ver tiendas registradas (`GET /api/stores`) | Pendiente |
+| 2 | Registrar una empresa (`POST /api/stores`) | Listo |
+| 3 | Entrar a la cola de una tienda | Pendiente |
+
+## Stack
+
+- Node.js + Express + TypeScript
+- MongoDB + Mongoose
+- Zod (validación de datos)
+- Jest + Supertest (pruebas)
+
+## Arquitectura
 
 ```mermaid
 flowchart TB
-    subgraph CLIENTE["Cliente"]
-        WEB["Interfaz web"]
-        INTERNET["Acceso desde internet<br/>Explorar tiendas y filas"]
-        QR["Código QR<br/>Acceso directo a una sucursal"]
-        ADMIN["Panel de administrador<br/>Gestionar negocio y filas"]
-    end
-
-    subgraph BACKEND["Backend · Node.js + Express + TypeScript"]
-        ROUTES["Routes<br/>Definición de endpoints"]
-        MW["Middlewares<br/>Validación y manejo de errores"]
-
-        subgraph CONTROLLERS["Controllers"]
-            C1["Store Controller"]
-            C2["Queue Controller"]
-        end
-
-        subgraph SERVICES["Services"]
-            S1["Store Service<br/>Consultar y registrar empresas"]
-            S2["Queue Service<br/>Generar y gestionar turnos"]
-        end
-
-        subgraph REPOSITORIES["Repositories"]
-            R1["Store Repository"]
-            R2["Queue Repository"]
-        end
-
-        MODELS["Models / Schemas<br/>Mongoose"]
-    end
-
-    DB[("MongoDB")]
-
-    INTERNET --> WEB
-    QR --> WEB
-    ADMIN --> WEB
-
-    WEB -->|"HTTP / REST"| ROUTES
-    ROUTES --> MW
-    MW --> C1
-    MW --> C2
-
-    C1 --> S1
-    C2 --> S2
-
-    S1 --> R1
-    S2 --> R2
-
-    R1 --> MODELS
-    R2 --> MODELS
-    MODELS --> DB
+    CLIENTE["Cliente (interfaz web)"] -->|"HTTP / REST"| ROUTES["Routes"]
+    ROUTES --> MW["Middlewares<br/>validación y errores"]
+    MW --> CTRL["Controllers"]
+    CTRL --> SVC["Services<br/>lógica de negocio"]
+    SVC --> REPO["Repositories"]
+    REPO --> MODELS["Models (Mongoose)"]
+    MODELS --> DB[("MongoDB")]
 ```
 
-## Stack tecnológico
+Cada capa tiene una sola responsabilidad: las rutas definen los endpoints, los controladores manejan la petición y respuesta HTTP, los servicios contienen la lógica de negocio, y solo los repositorios acceden a MongoDB mediante los modelos.
 
-- Node.js
-- Express
-- TypeScript
-- MongoDB + Mongoose
-- Jest / Supertest para pruebas
+## Estructura del proyecto
+
+```
+TurnHub/
+├── src/
+│   ├── config/          # env.ts, database.ts
+│   ├── controllers/     # store.controller.ts, queue.controller.ts
+│   ├── middlewares/     # validate.ts, errorHandler.ts
+│   ├── models/          # store.model.ts, ticket.model.ts
+│   ├── repositories/    # store.repository.ts, queue.repository.ts
+│   ├── routes/          # index.ts, store.routes.ts, queue.routes.ts
+│   ├── services/        # store.service.ts, queue.service.ts
+│   ├── types/           # type.ts
+│   ├── app.ts           # configuración de Express
+│   └── server.ts        # punto de entrada
+├── tests/
+├── .env.example
+├── jest.config.js
+├── package.json
+├── tsconfig.json
+└── README.md
+```
 
 ## Requisitos previos
 
-Antes de ejecutar el proyecto, asegúrate de tener instalado:
+- [Node.js](https://nodejs.org) 18 o superior (incluye npm)
+- [Git](https://git-scm.com)
+- MongoDB, de una de estas dos formas:
+  - **Local:** [MongoDB Community Server](https://www.mongodb.com/try/download/community) corriendo en el puerto 27017
+  - **Remota:** una base gratuita en [MongoDB Atlas](https://www.mongodb.com/atlas) (necesitas su cadena de conexión)
+- **Con Docker:** `docker compose up -d` levanta MongoDB sin instalar nada
+## Instalación y ejecución
 
-- Node.js 18 o superior
-- npm
-- MongoDB local o una base remota (MongoDB Atlas)
-- Git
-
-## Clonar el repositorio
+### 1. Clonar el repositorio
 
 ```bash
 git clone https://github.com/FabXix/TurnHub.git
 cd TurnHub
 ```
 
-## Instalación de dependencias
+### 2. Instalar dependencias
 
 ```bash
 npm install
 ```
 
-## Configuración de variables de entorno
+### 3. Configurar variables de entorno
 
-Crea un archivo `.env` en la raíz del proyecto basado en `.env.example`:
-
+Copia el archivo de ejemplo y créalo como `.env`:
+`docker compose up -d` levanta MongoDB sin instalar nada
 ```bash
+# Windows (cmd o PowerShell)
+copy .env.example .env
+
+# macOS / Linux
 cp .env.example .env
 ```
 
-Ejemplo de contenido:
+Contenido por defecto:
 
-```env
+```
 PORT=3000
 MONGODB_URI=mongodb://localhost:27017/turnhub
 NODE_ENV=development
 ```
 
-> Ajusta la URL de MongoDB según tu entorno local o remoto.
+Si usas MongoDB Atlas, reemplaza `MONGODB_URI` por tu cadena de conexión. El archivo `.env` **no se sube a GitHub**, cada persona crea el suyo.
 
-## Cómo ejecutar la aplicación
+### 4. Levantar el servidor
 
-### Modo desarrollo
+Modo desarrollo (se reinicia al guardar cambios):
 
 ```bash
 npm run dev
 ```
 
-### Modo producción
+Modo producción:
 
 ```bash
 npm run build
-npm run start
+npm start
 ```
 
-## Ejecutar pruebas
+Si todo salió bien verás:
+
+```
+MongoDB conectado
+TurnHub escuchando en http://localhost:3000
+```
+
+Puedes comprobarlo abriendo `http://localhost:3000/health`, que responde `{"status":"ok"}`.
+
+### Problemas comunes en Windows (PowerShell)
+
+Si `npm` marca que la ejecución de scripts está deshabilitada, tienes tres opciones:
+
+- Usar `npm.cmd` en lugar de `npm` (por ejemplo `npm.cmd install`).
+- Habilitar scripts solo para tu usuario: `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned`
+- Usar una terminal **cmd** en lugar de PowerShell.
+
+Si `npm run dev` falla con un error de conexión a Mongo, revisa que MongoDB esté corriendo y que `MONGODB_URI` sea correcta.
+
+## Pruebas
 
 ```bash
 npm test
 ```
 
-## Estructura del proyecto
+Las pruebas no necesitan MongoDB: mockean la capa de repositorio.
 
-```text
-src/
-  app.ts
-  server.ts
-  config/
-  controllers/
-  middlewares/
-  models/
-  repositories/
-  routes/
-  services/
-  types/
+## API
 
-tests/
-```
+URL base: `http://localhost:3000/api`
 
-## Endpoints principales
+### `POST /api/stores` — Registrar una empresa
 
-El backend está organizado por módulos para:
+**Body (JSON):**
 
-- gestionar tiendas
-- gestionar filas y tickets
-- validar entradas
-- manejar errores de forma centralizada
+| Campo | Tipo | Obligatorio | Reglas |
+| --- | --- | --- | --- |
+| `name` | string | Sí | 2 a 100 caracteres, único |
+| `description` | string | No | Máx. 500 caracteres |
+| `address` | string | No | Máx. 200 caracteres |
+| `phone` | string | No | 7 a 20 caracteres (dígitos, `+`, `-`, espacios, paréntesis) |
+| `email` | string | No | Correo válido |
 
-## Notas importantes
-
-- Si el proyecto aún no tiene scripts definidos en `package.json`, debes agregarlos antes de ejecutar `npm run dev` o `npm run start`.
-- En ese caso, la opción más directa es iniciar la app con TypeScript directamente:
+**Ejemplo:**
 
 ```bash
-npx tsx watch src/server.ts
+curl -X POST http://localhost:3000/api/stores \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Barbería El Corte","description":"Cortes y barba","phone":"33 1234 5678"}'
 ```
 
-o, si prefieres `ts-node-dev`:
+En PowerShell conviene usar `curl.exe` o una herramienta como Postman / Thunder Client.
 
-```bash
-npx ts-node-dev --respawn src/server.ts
+**Respuestas:**
+
+| Código | Cuándo |
+| --- | --- |
+| `201` | Empresa creada. Devuelve el documento con su `_id` |
+| `400` | Datos inválidos o JSON mal formado. Devuelve el detalle por campo |
+| `409` | Ya existe una empresa con ese nombre |
+| `500` | Error interno del servidor |
+
+**Ejemplo de `201`:**
+
+```json
+{
+  "_id": "665f1c2e8b3a4d0012345678",
+  "name": "Barbería El Corte",
+  "description": "Cortes y barba",
+  "address": "",
+  "phone": "33 1234 5678",
+  "email": "",
+  "createdAt": "2026-10-14T20:00:00.000Z",
+  "updatedAt": "2026-10-14T20:00:00.000Z"
+}
 ```
 
-## Contribución
+**Ejemplo de `400`:**
 
-1. Crear una rama nueva
-2. Hacer los cambios
-3. Ejecutar pruebas
-4. Hacer commit y abrir un pull request
+```json
+{
+  "error": "Datos inválidos",
+  "details": [{ "field": "name", "message": "El nombre es obligatorio" }]
+}
+```
+
+## Flujo de trabajo en equipo
+
+1. Antes de empezar a trabajar: `git pull origin main`
+2. Crea una rama para tu feature: `git checkout -b feature/nombre-de-la-feature`
+3. Haz tus cambios y corre `npm test`
+4. Sube tu rama: `git add .`, `git commit -m "descripción"`, `git push -u origin feature/nombre-de-la-feature`
+5. Abre un Pull Request en GitHub hacia `main`
 
 ## Licencia
 
-Este proyecto se entrega como trabajo académico / de desarrollo interno. Revisa la licencia del repositorio antes de usarlo en producción.
+Trabajo académico.

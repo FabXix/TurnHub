@@ -1,0 +1,34 @@
+{
+  "name": "turnhub",
+  "version": "1.0.0",
+  "description": "TurnHub es una API backend para gestionar tiendas, filas de espera y turnos de atención. La aplicación está pensada para permitir a los clientes consultar sucursales y a los administradores administrar la cola de atención en tiempo real.",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+  "dev": "tsx watch src/server.ts",
+  "build": "tsc",
+  "start": "node dist/server.js",
+  "test": "jest --runInBand"
+},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FabXix/TurnHub.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/FabXix/TurnHub/issues"
+  },
+  "homepage": "https://github.com/FabXix/TurnHub#readme",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.8",
+    "express": "^5.3.0",
+    "mongose": "^0.0.2-security",
+    "zod": "^4.6.7"
+  }
+}
