@@ -6,4 +6,14 @@ export const storeController = {
     const store = await storeService.registerStore(req.body);
     res.status(201).json(store);
   },
+
+  async getAll(_req: Request, res: Response) {
+    const stores = await storeService.listStores();
+    res.json(stores);
+  },
+
+  async getById(req: Request, res: Response) {
+    const store = await storeService.getStore(String(req.params.id));
+    res.json(store);
+  },
 };

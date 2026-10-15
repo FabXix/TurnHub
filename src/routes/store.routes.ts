@@ -22,5 +22,7 @@ const createStoreSchema = z.object({
 const router = Router();
 
 router.post("/", validateBody(createStoreSchema), storeController.create);
+router.get("/", storeController.getAll);
+router.get("/:id", storeController.getById);
 
 export default router;

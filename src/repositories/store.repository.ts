@@ -6,6 +6,14 @@ export const storeRepository = {
     return Store.create(data);
   },
 
+  findAll() {
+    return Store.find().sort({ createdAt: -1 });
+  },
+
+  findById(id: string) {
+    return Store.findById(id);
+  },
+
   findByName(name: string) {
     return Store.findOne({ name });
   },
