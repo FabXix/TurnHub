@@ -54,6 +54,7 @@ describe("Feature 3: cola de una tienda", () => {
 			storeId,
 			lastTicketNumber: 8,
 			waitingCount: 3,
+			currentTicketNumber: null,
 		});
 	});
 
