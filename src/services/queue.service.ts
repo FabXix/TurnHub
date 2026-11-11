@@ -86,6 +86,38 @@ export const queueService = {
 		return { previousTicket, currentTicket: current };
 	},
 
+	// Feature 5: consulta un turno con su posición en la fila.
+	async getTicket(storeId: string, ticketId: string) {
+		await ensureStoreExists(storeId);
+		if (!isValidObjectId(ticketId)) {
+			throw new AppError(400, "Identificador de turno inválido");
+		}
+
+		const ticket = await queueRepository.findTicketInStore(storeId, ticketId);
+		if (!ticket) {
+			throw new AppError(404, "Turno no encontrado");
+		}
+
+		let aheadOfYou: number | null = null;
+		let position: number | null = null;
+		if (ticket.status === TICKET_STATUS.WAITING) {
+			aheadOfYou = await queueRepository.countWaitingBefore(storeId, ticket.ticketNumber);
+			position = aheadOfYou + 1;
+		}
+
+		return {
+			id: ticket._id,
+			storeId,
+			ticketNumber: ticket.ticketNumber,
+			status: ticket.status,
+			position,
+			aheadOfYou,
+			createdAt: ticket.createdAt,
+			calledAt: ticket.calledAt,
+			finishedAt: ticket.finishedAt,
+		};
+	},
+
 	// Feature 4: cambia manualmente el estado de un turno respetando las transiciones permitidas.
 	async updateTicketStatus(storeId: string, ticketId: string, newStatus: TicketStatus) {
 		await ensureStoreExists(storeId);

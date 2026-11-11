@@ -16,6 +16,9 @@ const router = Router();
 router.post("/:storeId/queue", queueController.join);
 router.get("/:storeId/queue", queueController.getStatus);
 
+// Feature 5
+router.get("/:storeId/tickets/:ticketId", queueController.getTicket);
+
 // Feature 4
 router.patch("/:storeId/queue/next", queueController.callNext);
 router.patch(

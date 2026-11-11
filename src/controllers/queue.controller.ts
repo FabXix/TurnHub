@@ -12,6 +12,15 @@ export const queueController = {
 		res.status(200).json(status);
 	},
 
+	// Feature 5
+	async getTicket(req: Request, res: Response) {
+		const ticket = await queueService.getTicket(
+			String(req.params.storeId),
+			String(req.params.ticketId)
+		);
+		res.status(200).json(ticket);
+	},
+
 	// Feature 4
 	async callNext(req: Request, res: Response) {
 		const result = await queueService.callNext(String(req.params.storeId));

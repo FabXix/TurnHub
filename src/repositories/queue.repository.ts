@@ -33,6 +33,15 @@ export const queueRepository = {
 		return Ticket.findOne({ _id: ticketId, storeId });
 	},
 
+	// Feature 5: turnos en espera con número menor (los que están delante en la fila).
+	countWaitingBefore(storeId: string, ticketNumber: number) {
+		return Ticket.countDocuments({
+			storeId,
+			status: TICKET_STATUS.WAITING,
+			ticketNumber: { $lt: ticketNumber },
+		});
+	},
+
 	// Toma de forma atómica el turno en espera más antiguo (FIFO) y lo pasa a "en atención".
 	takeNextWaitingTicket(storeId: string) {
 		return Ticket.findOneAndUpdate(

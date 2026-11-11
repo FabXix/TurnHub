@@ -1,0 +1,321 @@
+{
+  "info": {
+    "name": "TurnHub - Feature 5",
+    "description": "Pruebas de la Feature 5 (consultar turno y posicion). Ejecutar en orden: 1 a 3 preparan datos, 4 son las pruebas de la feature, 5 son los errores. Se puede usar el Collection Runner.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "storeId", "value": "" },
+    { "key": "t1", "value": "" },
+    { "key": "t2", "value": "" },
+    { "key": "t3", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1. Preparacion",
+      "item": [
+        {
+          "name": "1.1 Crear tienda",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('storeId', pm.response.json()._id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Tienda Prueba F5 {{$timestamp}}\",\n  \"description\": \"demo\",\n  \"address\": \"Calle 1\",\n  \"phone\": \"6141234567\",\n  \"email\": \"demo@test.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/stores",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "stores"]
+            }
+          }
+        },
+        {
+          "name": "1.2 Entrar a la fila (turno 1)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "const b = pm.response.json();",
+                  "pm.collectionVariables.set('t' + b.ticketNumber, b._id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/stores/{{storeId}}/queue",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "stores", "{{storeId}}", "queue"]
+            }
+          }
+        },
+        {
+          "name": "1.3 Entrar a la fila (turno 2)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "const b = pm.response.json();",
+                  "pm.collectionVariables.set('t' + b.ticketNumber, b._id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/stores/{{storeId}}/queue",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "stores", "{{storeId}}", "queue"]
+            }
+          }
+        },
+        {
+          "name": "1.4 Entrar a la fila (turno 3)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "const b = pm.response.json();",
+                  "pm.collectionVariables.set('t' + b.ticketNumber, b._id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/stores/{{storeId}}/queue",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "stores", "{{storeId}}", "queue"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Feature 5 - Consultar turno",
+      "item": [
+        {
+          "name": "2.1 Turno 3 en espera (posicion 3)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const b = pm.response.json();",
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('estado en espera', () => pm.expect(b.status).to.eql('en espera'));",
+                  "pm.test('position = 3', () => pm.expect(b.position).to.eql(3));",
+                  "pm.test('aheadOfYou = 2', () => pm.expect(b.aheadOfYou).to.eql(2));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/stores/{{storeId}}/tickets/{{t3}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "stores", "{{storeId}}", "tickets", "{{t3}}"]
+            }
+          }
+        },
+        {
+          "name": "2.2 Avanzar la fila (llamar al siguiente)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/stores/{{storeId}}/queue/next",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "stores", "{{storeId}}", "queue", "next"]
+            }
+          }
+        },
+        {
+          "name": "2.3 Turno 3 otra vez (posicion 2)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const b = pm.response.json();",
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('position = 2', () => pm.expect(b.position).to.eql(2));",
+                  "pm.test('aheadOfYou = 1', () => pm.expect(b.aheadOfYou).to.eql(1));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/stores/{{storeId}}/tickets/{{t3}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "stores", "{{storeId}}", "tickets", "{{t3}}"]
+            }
+          }
+        },
+        {
+          "name": "2.4 Turno 1 en atencion (position null)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const b = pm.response.json();",
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('estado en atencion', () => pm.expect(b.status).to.eql('en atención'));",
+                  "pm.test('position null', () => pm.expect(b.position).to.eql(null));",
+                  "pm.test('aheadOfYou null', () => pm.expect(b.aheadOfYou).to.eql(null));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/stores/{{storeId}}/tickets/{{t1}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "stores", "{{storeId}}", "tickets", "{{t1}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Feature 5 - Errores",
+      "item": [
+        {
+          "name": "3.1 ID de turno invalido (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('400 Bad Request', () => pm.response.to.have.status(400));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/stores/{{storeId}}/tickets/abc",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "stores", "{{storeId}}", "tickets", "abc"]
+            }
+          }
+        },
+        {
+          "name": "3.2 Turno inexistente (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('404 Not Found', () => pm.response.to.have.status(404));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/stores/{{storeId}}/tickets/000000000000000000000000",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "stores", "{{storeId}}", "tickets", "000000000000000000000000"]
+            }
+          }
+        },
+        {
+          "name": "3.3 Tienda inexistente (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('404 Not Found', () => pm.response.to.have.status(404));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/stores/000000000000000000000000/tickets/{{t3}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "stores", "000000000000000000000000", "tickets", "{{t3}}"]
+            }
+          }
+        },
+        {
+          "name": "3.4 ID de tienda invalido (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('400 Bad Request', () => pm.response.to.have.status(400));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/stores/abc/tickets/{{t3}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "stores", "abc", "tickets", "{{t3}}"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
