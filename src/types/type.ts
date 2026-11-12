@@ -6,6 +6,17 @@ export interface CreateStoreInput {
   email?: string;
 }
 
+export interface QueueStatsDTO {
+  storeId: string;
+  waitingCount: number;
+  currentlyServing: number | null;
+  completedCount: number;
+  cancelledCount: number;
+  noShowCount: number;
+  averageServiceMinutes: number | null;
+  estimatedWaitMinutes: number | null;
+}
+
 export class AppError extends Error {
   constructor(
     public statusCode: number,

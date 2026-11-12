@@ -39,6 +39,13 @@
   .stat .n { font-size: 44px; font-weight: 700; line-height: 1; transition: transform .2s; }
   .stat .n.bump { transform: scale(1.25); color: var(--brand); }
   .stat .l { color: var(--muted); font-size: 13px; margin-top: 6px; }
+  .queue-panel { border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin: 8px 0 16px; }
+  .queue-panel h3 { margin: 0 0 10px; font-size: 15px; }
+  .queue-panel .stats { margin: 0; }
+  .queue-panel .stat { padding: 12px 8px; }
+  .queue-panel .stat .n { font-size: 28px; }
+  .queue-error { color: var(--err); font-size: 14px; margin: 0; }
+  .refresh { float: right; margin: 0 !important; padding: 6px 10px !important; font-size: 13px; }
   .info { color: var(--muted); font-size: 14px; margin: 0 0 6px; }
   .ticket { background: linear-gradient(135deg, #4f46e5, #7c3aed); color: #fff; border-radius: 14px; padding: 18px; text-align: center; margin-top: 16px; animation: pop .3s ease; }
   .ticket .n { font-size: 56px; font-weight: 800; }
@@ -95,6 +102,7 @@
   let selected = null;       // store object
   let myTickets = {};        // storeId -> [ticketNumber, ...] (taken from this page)
   let lastShown = {};        // storeId -> ticket just taken
+  let ticketDetails = {};   // ticket id -> latest position and status
   let prevStatus = null;
   let pollTimer = null;
 
@@ -115,9 +123,15 @@
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       const det = Array.isArray(data.details) ? ' — ' + data.details.map(d => d.message || d).join(', ') : '';
-      throw new Error((data.error || 'Error ' + res.status) + det);
+      const error = new Error((data.error || 'Error ' + res.status) + det);
+      error.status = res.status;
+      throw error;
     }
     return data;
+  }
+
+  function getQueueStats(storeId) {
+    return api('GET', `/api/stores/${storeId}/queue/stats`);
   }
 
   async function checkHealth() {
@@ -158,17 +172,54 @@
 
   async function refreshStatus() {
     if (!selected) return;
+    let st;
+    let stats;
+    let statsError = null;
     try {
-      const st = await api('GET', `/api/stores/${selected._id}/queue`);
-      renderDetail(st);
-    } catch (e) { toast(e.message, 'err'); }
+      st = await api('GET', `/api/stores/${selected._id}/queue`);
+    } catch (e) {
+      toast(e.message, 'err');
+      return;
+    }
+    try {
+      stats = await getQueueStats(selected._id);
+    } catch (e) {
+      statsError = e;
+    }
+    const ticket = lastShown[selected._id];
+    if (ticket && ticket._id) {
+      try {
+        ticketDetails[ticket._id] = await api('GET', `/api/stores/${selected._id}/tickets/${ticket._id}`);
+      } catch (e) {
+        // The queue remains usable if the optional position refresh fails.
+      }
+    }
+    renderDetail(st, stats, statsError);
   }
 
-  function renderDetail(st) {
+  function renderDetail(st, stats, statsError) {
     if (!selected) return;
     const mine = myTickets[selected._id] || [];
     const t = lastShown[selected._id];
+    const ticketInfo = t && t._id ? (ticketDetails[t._id] || t) : t;
     const bump = n => prevStatus && prevStatus[n] !== st[n] ? 'bump' : '';
+    const statsContent = statsError
+      ? `<p class="queue-error">${statsError.status === 400 ? 'El identificador de la tienda no es válido.' : statsError.status === 404 ? 'La tienda no existe.' : 'No se pudieron cargar las estadísticas de la fila.'}</p>`
+      : !stats
+        ? '<p class="info">Cargando estadísticas…</p>'
+        : `
+          <div class="stats">
+            <div class="stat"><div class="n">${stats.currentlyServing ?? 'Ninguno en atención'}</div><div class="l">Turno en atención</div></div>
+            <div class="stat"><div class="n">${stats.waitingCount}</div><div class="l">Personas en espera</div></div>
+            <div class="stat"><div class="n">${stats.averageServiceMinutes === null ? '—' : stats.averageServiceMinutes + ' min'}</div><div class="l">Promedio de atención</div></div>
+            <div class="stat"><div class="n">${stats.estimatedWaitMinutes === null ? '—' : stats.estimatedWaitMinutes + ' min'}</div><div class="l">Espera estimada</div></div>
+            <div class="stat"><div class="n">${stats.completedCount}</div><div class="l">Completados</div></div>
+            <div class="stat"><div class="n">${stats.cancelledCount}</div><div class="l">Cancelados</div></div>
+            <div class="stat"><div class="n">${stats.noShowCount}</div><div class="l">No presentados</div></div>
+          </div>
+          ${stats.averageServiceMinutes === null || stats.estimatedWaitMinutes === null
+            ? '<p class="info">Aún no hay datos suficientes para estimar el tiempo.</p>'
+            : ''}`;
 
     $('#detail').innerHTML = `
       <h2>${esc(selected.name)}</h2>
@@ -181,9 +232,15 @@
         <div class="stat"><div class="n ${st ? bump('lastTicketNumber') : ''}">${st ? st.lastTicketNumber : '…'}</div><div class="l">Último turno entregado</div></div>
       </div>
 
+      <div class="queue-panel">
+        <h3>Estado de la fila <button class="primary refresh" id="refreshBtn" type="button">Actualizar</button></h3>
+        ${statsContent}
+      </div>
+
       <button class="primary" id="joinBtn">🎟️ Tomar turno</button>
 
-      ${t ? `<div class="ticket"><div class="s">Tu turno</div><div class="n">#${t.ticketNumber}</div><div class="s">Estado: ${esc(t.status)}</div></div>` : ''}
+      ${ticketInfo ? `<div class="ticket"><div class="s">Tu turno</div><div class="n">#${ticketInfo.ticketNumber}</div><div class="s">Estado: ${esc(ticketInfo.status)}</div>
+        ${ticketInfo.status === 'en espera' && ticketInfo.position ? `<div class="s">Posición: ${ticketInfo.position}${stats && stats.averageServiceMinutes !== null ? ` · Aproximadamente ${Math.ceil(ticketInfo.aheadOfYou * stats.averageServiceMinutes)} min hasta tu turno` : ''}</div>` : ''}</div>` : ''}
 
       ${mine.length ? `<div class="how">Turnos que has tomado en esta página:</div>
         <ul class="history">${mine.map(n => `<li>#${n}</li>`).join('')}</ul>` : ''}
@@ -192,6 +249,7 @@
     `;
     if (st) prevStatus = st;
     $('#joinBtn').onclick = join;
+    $('#refreshBtn').onclick = refreshStatus;
   }
 
   async function join() {

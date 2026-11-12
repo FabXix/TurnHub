@@ -33,6 +33,78 @@ describe("Feature 3: cola de una tienda", () => {
 		expect(mockedQueueRepository.createTicket).toHaveBeenCalledWith(storeId, 5);
 	});
 
+	describe("Feature 6: estadísticas de la cola", () => {
+		it("devuelve null para el promedio y la espera estimada si no hay turnos completados", async () => {
+			mockedStoreRepository.findById.mockResolvedValue({ _id: storeId } as any);
+			mockedQueueRepository.getQueueStats.mockResolvedValue({
+				waitingCount: 0,
+				currentlyServing: null,
+				completedCount: 0,
+				cancelledCount: 0,
+				noShowCount: 0,
+				averageServiceMinutes: null,
+			});
+
+			const response = await request(app).get(`/api/stores/${storeId}/queue/stats`);
+
+			expect(response.status).toBe(200);
+			expect(response.body).toEqual({
+				storeId,
+				waitingCount: 0,
+				currentlyServing: null,
+				completedCount: 0,
+				cancelledCount: 0,
+				noShowCount: 0,
+				averageServiceMinutes: null,
+				estimatedWaitMinutes: null,
+			});
+		});
+
+		it("redondea el promedio y calcula la espera estimada con los conteos de la tienda", async () => {
+			mockedStoreRepository.findById.mockResolvedValue({ _id: storeId } as any);
+			mockedQueueRepository.getQueueStats.mockResolvedValue({
+				waitingCount: 3,
+				currentlyServing: 7,
+				completedCount: 25,
+				cancelledCount: 2,
+				noShowCount: 1,
+				averageServiceMinutes: 4.126,
+			});
+
+			const response = await request(app).get(`/api/stores/${storeId}/queue/stats`);
+
+			expect(response.status).toBe(200);
+			expect(response.body).toEqual({
+				storeId,
+				waitingCount: 3,
+				currentlyServing: 7,
+				completedCount: 25,
+				cancelledCount: 2,
+				noShowCount: 1,
+				averageServiceMinutes: 4.13,
+				estimatedWaitMinutes: 13,
+			});
+			expect(mockedQueueRepository.getQueueStats).toHaveBeenCalledWith(storeId);
+		});
+
+		it("devuelve 400 para un storeId inválido", async () => {
+			const response = await request(app).get("/api/stores/id-invalido/queue/stats");
+
+			expect(response.status).toBe(400);
+			expect(mockedStoreRepository.findById).not.toHaveBeenCalled();
+			expect(mockedQueueRepository.getQueueStats).not.toHaveBeenCalled();
+		});
+
+		it("devuelve 404 si la tienda no existe", async () => {
+			mockedStoreRepository.findById.mockResolvedValue(null);
+
+			const response = await request(app).get(`/api/stores/${storeId}/queue/stats`);
+
+			expect(response.status).toBe(404);
+			expect(mockedQueueRepository.getQueueStats).not.toHaveBeenCalled();
+		});
+	});
+
 	it("devuelve 404 si la tienda no existe", async () => {
 		mockedStoreRepository.findById.mockResolvedValue(null);
 

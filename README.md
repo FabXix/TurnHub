@@ -197,6 +197,37 @@ URL base: `http://localhost:3000/api`
 }
 ```
 
+### Estadísticas de la cola y espera estimada
+
+**Método** GET<br>
+**Endpoint** `/api/stores/:storeId/queue/stats`<br>
+**Propósito** Consultar conteos por estado, el turno en atención y los tiempos de atención/espera de una tienda.<br>
+**Request** Sin body.<br>
+**HTTP** `200 OK`, `400 Bad Request`, `404 Not Found`, `500 Internal Server Error`
+
+El promedio usa los últimos 20 turnos completados que tengan `calledAt` y `finishedAt`, y se expresa en minutos con dos decimales. Si no existen datos suficientes, los campos de tiempo son `null`.
+
+**Ejemplo con curl:**
+
+```bash
+curl http://localhost:3000/api/stores/665f1c2e8b3a4d0012345678/queue/stats
+```
+
+**Ejemplo de respuesta `200`:**
+
+```json
+{
+  "storeId": "665f1c2e8b3a4d0012345678",
+  "waitingCount": 3,
+  "currentlyServing": 7,
+  "completedCount": 25,
+  "cancelledCount": 2,
+  "noShowCount": 1,
+  "averageServiceMinutes": 4.13,
+  "estimatedWaitMinutes": 13
+}
+```
+
 **Body (JSON):**
 
 | Campo | Tipo | Obligatorio | Reglas |

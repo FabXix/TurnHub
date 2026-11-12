@@ -1,3 +1,4 @@
+import { Types } from "mongoose";
 import { Ticket, TICKET_STATUS, TicketStatus } from "../models/ticket.model";
 
 const FINAL_STATUSES: TicketStatus[] = [
@@ -27,6 +28,66 @@ export const queueRepository = {
 	// Feature 4
 	findServingTicket(storeId: string) {
 		return Ticket.findOne({ storeId, status: TICKET_STATUS.SERVING });
+	},
+
+	async getQueueStats(storeId: string) {
+		const storeObjectId = new Types.ObjectId(storeId);
+		const [counts, servingTicket, average] = await Promise.all([
+			Ticket.aggregate([
+				{ $match: { storeId: storeObjectId } },
+				{
+					$group: {
+						_id: null,
+						waitingCount: {
+							$sum: { $cond: [{ $eq: ["$status", TICKET_STATUS.WAITING] }, 1, 0] },
+						},
+						completedCount: {
+							$sum: { $cond: [{ $eq: ["$status", TICKET_STATUS.COMPLETED] }, 1, 0] },
+						},
+						cancelledCount: {
+							$sum: { $cond: [{ $eq: ["$status", TICKET_STATUS.CANCELLED] }, 1, 0] },
+						},
+						noShowCount: {
+							$sum: { $cond: [{ $eq: ["$status", TICKET_STATUS.NO_SHOW] }, 1, 0] },
+						},
+					},
+				},
+			]),
+			Ticket.findOne({ storeId, status: TICKET_STATUS.SERVING })
+				.select({ ticketNumber: 1 })
+				.lean(),
+			Ticket.aggregate([
+				{
+					$match: {
+						storeId: storeObjectId,
+						status: TICKET_STATUS.COMPLETED,
+						calledAt: { $ne: null },
+						finishedAt: { $ne: null },
+					},
+				},
+				{ $sort: { finishedAt: -1 } },
+				{ $limit: 20 },
+				{
+					$group: {
+						_id: null,
+						averageServiceMinutes: {
+							$avg: {
+								$divide: [{ $subtract: ["$finishedAt", "$calledAt"] }, 60000],
+							},
+						},
+					},
+				},
+			]),
+		]);
+
+		return {
+			waitingCount: counts[0]?.waitingCount ?? 0,
+			completedCount: counts[0]?.completedCount ?? 0,
+			cancelledCount: counts[0]?.cancelledCount ?? 0,
+			noShowCount: counts[0]?.noShowCount ?? 0,
+			currentlyServing: servingTicket?.ticketNumber ?? null,
+			averageServiceMinutes: average[0]?.averageServiceMinutes ?? null,
+		};
 	},
 
 	findTicketInStore(storeId: string, ticketId: string) {

@@ -14,6 +14,7 @@ const updateTicketStatusSchema = z.object({
 const router = Router();
 
 router.post("/:storeId/queue", queueController.join);
+router.get("/:storeId/queue/stats", queueController.getStats);
 router.get("/:storeId/queue", queueController.getStatus);
 
 // Feature 5

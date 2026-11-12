@@ -12,6 +12,11 @@ export const queueController = {
 		res.status(200).json(status);
 	},
 
+	async getStats(req: Request, res: Response) {
+		const stats = await queueService.getQueueStats(String(req.params.storeId));
+		res.status(200).json(stats);
+	},
+
 	// Feature 5
 	async getTicket(req: Request, res: Response) {
 		const ticket = await queueService.getTicket(

@@ -2,7 +2,7 @@ import { isValidObjectId } from "mongoose";
 import { storeRepository } from "../repositories/store.repository";
 import { queueRepository } from "../repositories/queue.repository";
 import { ALLOWED_TRANSITIONS, TICKET_STATUS, TicketStatus } from "../models/ticket.model";
-import { AppError } from "../types/type";
+import { AppError, QueueStatsDTO } from "../types/type";
 
 const MAX_TICKET_CREATION_ATTEMPTS = 5;
 
@@ -61,6 +61,29 @@ export const queueService = {
 			lastTicketNumber,
 			waitingCount,
 			currentTicketNumber: servingTicket?.ticketNumber ?? null,
+		};
+	},
+
+	async getQueueStats(storeId: string): Promise<QueueStatsDTO> {
+		await ensureStoreExists(storeId);
+		const stats = await queueRepository.getQueueStats(storeId);
+		const averageServiceMinutes =
+			stats.averageServiceMinutes === null
+				? null
+				: Math.round(stats.averageServiceMinutes * 100) / 100;
+
+		return {
+			storeId,
+			waitingCount: stats.waitingCount,
+			currentlyServing: stats.currentlyServing,
+			completedCount: stats.completedCount,
+			cancelledCount: stats.cancelledCount,
+			noShowCount: stats.noShowCount,
+			averageServiceMinutes,
+			estimatedWaitMinutes:
+				averageServiceMinutes === null
+					? null
+					: Math.ceil(stats.waitingCount * averageServiceMinutes),
 		};
 	},
 
