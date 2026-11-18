@@ -1,4 +1,5 @@
-import { Types } from "mongoose";
+import mongoose, { Types } from "mongoose";
+import { AppError } from "../types/type";
 import { Ticket, TICKET_STATUS, TicketStatus } from "../models/ticket.model";
 
 const FINAL_STATUSES: TicketStatus[] = [
@@ -103,13 +104,48 @@ export const queueRepository = {
 		});
 	},
 
-	// Toma de forma atómica el turno en espera más antiguo (FIFO) y lo pasa a "en atención".
-	takeNextWaitingTicket(storeId: string) {
-		return Ticket.findOneAndUpdate(
-			{ storeId, status: TICKET_STATUS.WAITING },
-			{ $set: { status: TICKET_STATUS.SERVING, calledAt: new Date() } },
-			{ sort: { ticketNumber: 1 }, returnDocument: "after" }
-		);
+	// Feature 4 / RN-19, RN-20, RN-21: avanza la fila como una sola unidad.
+	// Dentro de una transacción: finaliza el turno en atención y promueve el siguiente en espera (FIFO).
+	// Si algo falla, MongoDB revierte ambos cambios. Si dos llamadas compiten, la transacción
+	// detecta el conflicto de escritura y la reintenta con los datos actualizados.
+	// Devuelve null si no hay turnos en espera (en ese caso no se modifica nada).
+	async advanceQueue(storeId: string) {
+		const session = await mongoose.startSession();
+		try {
+			let result: { previousTicket: unknown; currentTicket: unknown } | null = null;
+
+			await session.withTransaction(async () => {
+				result = null;
+				const next = await Ticket.findOne({ storeId, status: TICKET_STATUS.WAITING })
+					.sort({ ticketNumber: 1 })
+					.session(session);
+				if (!next) return;
+
+				const now = new Date();
+				// Primero se libera el lugar de "serving" para respetar el índice parcial único.
+				const previousTicket = await Ticket.findOneAndUpdate(
+					{ storeId, status: TICKET_STATUS.SERVING },
+					{ $set: { status: TICKET_STATUS.COMPLETED, finishedAt: now } },
+					{ session, returnDocument: "after" }
+				);
+
+				const currentTicket = await Ticket.findOneAndUpdate(
+					{ _id: next._id, status: TICKET_STATUS.WAITING },
+					{ $set: { status: TICKET_STATUS.SERVING, calledAt: now } },
+					{ session, returnDocument: "after" }
+				);
+				if (!currentTicket) {
+					// Lanzar dentro de la transacción la aborta y revierte el paso anterior.
+					throw new AppError(409, "La fila cambió mientras se avanzaba, intenta de nuevo");
+				}
+
+				result = { previousTicket, currentTicket };
+			});
+
+			return result as { previousTicket: unknown; currentTicket: unknown } | null;
+		} finally {
+			await session.endSession();
+		}
 	},
 
 	// Solo actualiza si el turno sigue en el estado esperado (evita carreras entre solicitudes).

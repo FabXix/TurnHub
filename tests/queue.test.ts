@@ -18,12 +18,12 @@ beforeEach(() => {
 describe("Feature 3: cola de una tienda", () => {
 	it("crea un turno consecutivo y devuelve 201", async () => {
 		mockedStoreRepository.findById.mockResolvedValue({ _id: storeId } as any);
-		mockedQueueRepository.findLastTicketNumber.mockResolvedValue(4);
+		mockedStoreRepository.nextTicketNumber.mockResolvedValue(5);
 		mockedQueueRepository.createTicket.mockResolvedValue({
 			_id: "ticket-id",
 			storeId,
 			ticketNumber: 5,
-			status: "en espera",
+			status: "waiting",
 		} as any);
 
 		const response = await request(app).post(`/api/stores/${storeId}/queue`);
@@ -128,6 +128,36 @@ describe("Feature 3: cola de una tienda", () => {
 			waitingCount: 3,
 			currentTicketNumber: null,
 		});
+	});
+
+	it("devuelve 503 si se agotan los reintentos por colisión de número de turno", async () => {
+		mockedStoreRepository.findById.mockResolvedValue({ _id: storeId } as any);
+		mockedStoreRepository.nextTicketNumber.mockResolvedValue(5);
+		mockedQueueRepository.findLastTicketNumber.mockResolvedValue(9);
+		mockedQueueRepository.createTicket.mockRejectedValue(
+			Object.assign(new Error("E11000"), { code: 11000, keyPattern: { storeId: 1, ticketNumber: 1 } })
+		);
+
+		const response = await request(app).post(`/api/stores/${storeId}/queue`);
+
+		expect(response.status).toBe(503);
+		expect(response.body.error).not.toMatch(/empresa/);
+		expect(mockedQueueRepository.createTicket).toHaveBeenCalledTimes(5);
+	});
+
+	it("sincroniza el contador con el último turno real y reintenta si el número ya existía", async () => {
+		mockedStoreRepository.findById.mockResolvedValue({ _id: storeId } as any);
+		mockedStoreRepository.nextTicketNumber.mockResolvedValueOnce(1).mockResolvedValueOnce(6);
+		mockedQueueRepository.findLastTicketNumber.mockResolvedValue(5);
+		mockedQueueRepository.createTicket
+			.mockRejectedValueOnce(Object.assign(new Error("E11000"), { code: 11000 }))
+			.mockResolvedValueOnce({ ticketNumber: 6, status: "waiting" } as any);
+
+		const response = await request(app).post(`/api/stores/${storeId}/queue`);
+
+		expect(response.status).toBe(201);
+		expect(response.body.ticketNumber).toBe(6);
+		expect(mockedStoreRepository.syncTicketSeq).toHaveBeenCalledWith(storeId, 5);
 	});
 
 	it("devuelve 400 para un identificador inválido", async () => {

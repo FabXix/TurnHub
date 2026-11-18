@@ -1,7 +1,7 @@
 import { isValidObjectId } from "mongoose";
 import { storeRepository } from "../repositories/store.repository";
 import { queueRepository } from "../repositories/queue.repository";
-import { ALLOWED_TRANSITIONS, TICKET_STATUS, TicketStatus } from "../models/ticket.model";
+import { ALLOWED_TRANSITIONS, TICKET_STATUS, TICKET_STATUS_LABELS, TicketStatus } from "../models/ticket.model";
 import { AppError, QueueStatsDTO } from "../types/type";
 
 const MAX_TICKET_CREATION_ATTEMPTS = 5;
@@ -32,20 +32,28 @@ export const queueService = {
 	async joinQueue(storeId: string) {
 		await ensureStoreExists(storeId);
 
-		// Si dos solicitudes leen el mismo último turno, el índice único provoca
-		// una colisión en una de ellas y el siguiente intento calcula otro número. MAx 5 veces
+		// El número sale de un contador atómico ($inc) en la tienda, así que dos solicitudes
+		// simultáneas nunca reciben el mismo número. El índice único (storeId, ticketNumber)
+		// queda como red de seguridad: si choca (datos previos al contador), se sincroniza
+		// el contador con el último turno real y se reintenta.
 		for (let attempt = 0; attempt < MAX_TICKET_CREATION_ATTEMPTS; attempt += 1) {
-			const lastTicketNumber = await queueRepository.findLastTicketNumber(storeId);
+			const ticketNumber = await storeRepository.nextTicketNumber(storeId);
+			if (ticketNumber === null) {
+				throw new AppError(404, "Empresa no encontrada");
+			}
 			try {
-				return await queueRepository.createTicket(storeId, lastTicketNumber + 1);
+				return await queueRepository.createTicket(storeId, ticketNumber);
 			} catch (error) {
-				if (!isDuplicateKeyError(error) || attempt === MAX_TICKET_CREATION_ATTEMPTS - 1) {
+				if (!isDuplicateKeyError(error)) {
 					throw error;
 				}
+				const lastTicketNumber = await queueRepository.findLastTicketNumber(storeId);
+				await storeRepository.syncTicketSeq(storeId, lastTicketNumber);
 			}
 		}
 
-		throw new AppError(500, "No fue posible generar el turno");
+		// Se agotaron los reintentos por colisiones con otras solicitudes simultáneas.
+		throw new AppError(503, "La fila tiene mucha demanda en este momento, intenta tomar turno de nuevo");
 	},
 
 	async getQueueStatus(storeId: string) {
@@ -87,26 +95,15 @@ export const queueService = {
 		};
 	},
 
-	// Feature 4: llama al siguiente turno en espera y finaliza el que estaba en atención.
+	// Feature 4: llama al siguiente turno en espera y finaliza el que estaba en atención (transacción).
 	async callNext(storeId: string) {
 		await ensureStoreExists(storeId);
 
-		const previous = await queueRepository.findServingTicket(storeId);
-		const current = await queueRepository.takeNextWaitingTicket(storeId);
-		if (!current) {
+		const result = await queueRepository.advanceQueue(storeId);
+		if (!result) {
 			throw new AppError(404, "No hay turnos en espera");
 		}
-
-		let previousTicket = null;
-		if (previous) {
-			previousTicket = await queueRepository.updateTicketStatus(
-				String(previous._id),
-				TICKET_STATUS.SERVING,
-				TICKET_STATUS.COMPLETED
-			);
-		}
-
-		return { previousTicket, currentTicket: current };
+		return result;
 	},
 
 	// Feature 5: consulta un turno con su posición en la fila.
@@ -133,6 +130,7 @@ export const queueService = {
 			storeId,
 			ticketNumber: ticket.ticketNumber,
 			status: ticket.status,
+			statusLabel: TICKET_STATUS_LABELS[ticket.status as TicketStatus],
 			position,
 			aheadOfYou,
 			createdAt: ticket.createdAt,

@@ -1,9 +1,29 @@
+import type { UserRole } from "../models/user.model";
+
 export interface CreateStoreInput {
   name: string;
-  description?: string;
-  address?: string;
-  phone?: string;
-  email?: string;
+  description: string;
+  address: string;
+  phone: string;
+  email: string;
+}
+
+export interface RegisterUserInput {
+  name: string;
+  email: string;
+  password: string;
+}
+
+export interface LoginInput {
+  email: string;
+  password: string;
+}
+
+// Datos del usuario autenticado que viajan en el JWT y se guardan en res.locals.auth.
+export interface AuthPayload {
+  sub: string;
+  role: UserRole;
+  storeId: string | null;
 }
 
 export interface QueueStatsDTO {

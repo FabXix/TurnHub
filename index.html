@@ -55,6 +55,12 @@
   .history li { background: #eef2ff; color: var(--brand); border-radius: 999px; padding: 4px 12px; font-weight: 600; font-size: 14px; }
   #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 10px 18px; border-radius: 10px; opacity: 0; pointer-events: none; transition: opacity .2s; }
   #toast.show { opacity: 1; }
+  .session { font-size: 13px; color: var(--muted); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .session b { color: var(--ink); }
+  button.link { background: none; border: 0; color: var(--brand); font: inherit; cursor: pointer; padding: 0; text-decoration: underline; }
+  .staff { border: 1px dashed var(--brand); border-radius: 12px; padding: 14px; margin: 8px 0 16px; background: #f8f7ff; }
+  .staff h3 { margin: 0 0 6px; font-size: 15px; }
+  .hint { font-size: 12px; color: var(--muted); margin: 6px 0 0; }
   #toast.err { background: var(--err); }
   #toast.ok { background: var(--ok); }
   .how { font-size: 13px; color: var(--muted); border-top: 1px dashed var(--line); margin-top: 16px; padding-top: 10px; }
@@ -69,17 +75,36 @@
 
 <main>
   <section class="card">
+    <div id="session"></div>
     <h2>Empresas</h2>
     <div id="stores"><div class="empty">Cargando…</div></div>
 
-    <details id="createBox">
+    <details id="authBox">
+      <summary>🔐 Acceso para negocios</summary>
+      <form id="loginForm">
+        <label>Correo<input name="email" type="email" required></label>
+        <label>Contraseña<input name="password" type="password" required></label>
+        <button class="primary" type="submit">Iniciar sesión</button>
+      </form>
+      <details>
+        <summary>¿No tienes cuenta? Crear cuenta de administrador</summary>
+        <form id="registerForm">
+          <label>Nombre<input name="name" required minlength="2" maxlength="100"></label>
+          <label>Correo<input name="email" type="email" required></label>
+          <label>Contraseña (mín. 8)<input name="password" type="password" required minlength="8" maxlength="72"></label>
+          <button class="primary" type="submit">Crear cuenta</button>
+        </form>
+      </details>
+    </details>
+
+    <details id="createBox" hidden>
       <summary>+ Registrar nueva empresa</summary>
       <form id="createForm">
         <label>Nombre *<input name="name" required minlength="2" maxlength="100" placeholder="Ej. Banco Central"></label>
-        <label>Descripción<input name="description" maxlength="500"></label>
-        <label>Dirección<input name="address" maxlength="200"></label>
-        <label>Teléfono<input name="phone" placeholder="+52 555 123 4567"></label>
-        <label>Correo<input name="email" type="email"></label>
+        <label>Descripción *<input name="description" required maxlength="500"></label>
+        <label>Dirección *<input name="address" required maxlength="200"></label>
+        <label>Teléfono * (10 dígitos)<input name="phone" required pattern="\d{10}" maxlength="10" placeholder="3312345678"></label>
+        <label>Correo *<input name="email" type="email" required></label>
         <button class="primary" type="submit">Registrar empresa</button>
       </form>
     </details>
@@ -106,6 +131,31 @@
   let prevStatus = null;
   let pollTimer = null;
 
+  // Sesión del personal (admin u operador). Los clientes no necesitan cuenta.
+  const SESSION_KEY = 'turnhub.session';
+  let session = null; // { token, user: { id, name, role, storeId } }
+  try { session = JSON.parse(sessionStorage.getItem(SESSION_KEY)); } catch { session = null; }
+  function saveSession(s) {
+    session = s;
+    try { s ? sessionStorage.setItem(SESSION_KEY, JSON.stringify(s)) : sessionStorage.removeItem(SESSION_KEY); } catch {}
+    renderSession();
+    if (selected) refreshStatus();
+  }
+  function canManage(store) {
+    if (!session || !store) return false;
+    const u = session.user;
+    return u.role === 'admin' ? String(store.ownerId) === u.id : u.storeId === store._id;
+  }
+  function renderSession() {
+    const u = session && session.user;
+    $('#session').innerHTML = u
+      ? `<div class="session">Sesión: <b>${esc(u.name)}</b> (${u.role === 'admin' ? 'administrador' : 'operador'}) <button class="link" id="logoutBtn">Salir</button></div>`
+      : '';
+    if (u) $('#logoutBtn').onclick = () => { saveSession(null); toast('Sesión cerrada'); };
+    $('#authBox').hidden = !!u;
+    $('#createBox').hidden = !(u && u.role === 'admin');
+  }
+
   function toast(msg, kind) {
     const t = $('#toast');
     t.textContent = msg;
@@ -117,7 +167,10 @@
   async function api(method, path, body) {
     const res = await fetch(BASE + path, {
       method,
-      headers: body ? { 'Content-Type': 'application/json' } : {},
+      headers: {
+        ...(body ? { 'Content-Type': 'application/json' } : {}),
+        ...(session ? { Authorization: 'Bearer ' + session.token } : {}),
+      },
       body: body ? JSON.stringify(body) : undefined,
     });
     const data = await res.json().catch(() => ({}));
@@ -125,6 +178,7 @@
       const det = Array.isArray(data.details) ? ' — ' + data.details.map(d => d.message || d).join(', ') : '';
       const error = new Error((data.error || 'Error ' + res.status) + det);
       error.status = res.status;
+      if (res.status === 401 && session) saveSession(null); // token vencido
       throw error;
     }
     return data;
@@ -232,6 +286,13 @@
         <div class="stat"><div class="n ${st ? bump('lastTicketNumber') : ''}">${st ? st.lastTicketNumber : '…'}</div><div class="l">Último turno entregado</div></div>
       </div>
 
+      ${canManage(selected) ? `<div class="staff">
+        <h3>Panel del negocio</h3>
+        <p class="info">Turno en atención: <b>${st && st.currentTicketNumber !== null ? '#' + st.currentTicketNumber : 'ninguno'}</b></p>
+        <button class="primary" id="nextBtn" type="button" ${st && st.waitingCount === 0 ? 'disabled' : ''}>📣 Llamar siguiente turno</button>
+        <p class="hint">Al llamar al siguiente, el turno en atención se marca como completado.</p>
+      </div>` : ''}
+
       <div class="queue-panel">
         <h3>Estado de la fila <button class="primary refresh" id="refreshBtn" type="button">Actualizar</button></h3>
         ${statsContent}
@@ -239,8 +300,8 @@
 
       <button class="primary" id="joinBtn">🎟️ Tomar turno</button>
 
-      ${ticketInfo ? `<div class="ticket"><div class="s">Tu turno</div><div class="n">#${ticketInfo.ticketNumber}</div><div class="s">Estado: ${esc(ticketInfo.status)}</div>
-        ${ticketInfo.status === 'en espera' && ticketInfo.position ? `<div class="s">Posición: ${ticketInfo.position}${stats && stats.averageServiceMinutes !== null ? ` · Aproximadamente ${Math.ceil(ticketInfo.aheadOfYou * stats.averageServiceMinutes)} min hasta tu turno` : ''}</div>` : ''}</div>` : ''}
+      ${ticketInfo ? `<div class="ticket"><div class="s">Tu turno</div><div class="n">#${ticketInfo.ticketNumber}</div><div class="s">Estado: ${esc(ticketInfo.statusLabel || STATUS_LABELS[ticketInfo.status] || ticketInfo.status)}</div>
+        ${ticketInfo.status === 'waiting' && ticketInfo.position ? `<div class="s">Posición: ${ticketInfo.position}${stats && stats.averageServiceMinutes !== null ? ` · Aproximadamente ${Math.ceil(ticketInfo.aheadOfYou * stats.averageServiceMinutes)} min hasta tu turno` : ''}</div>` : ''}</div>` : ''}
 
       ${mine.length ? `<div class="how">Turnos que has tomado en esta página:</div>
         <ul class="history">${mine.map(n => `<li>#${n}</li>`).join('')}</ul>` : ''}
@@ -249,8 +310,34 @@
     `;
     if (st) prevStatus = st;
     $('#joinBtn').onclick = join;
+    if ($('#nextBtn')) $('#nextBtn').onclick = callNext;
     $('#refreshBtn').onclick = refreshStatus;
   }
+
+  const STATUS_LABELS = { waiting: 'En espera', serving: 'En atención', completed: 'Completado', cancelled: 'Cancelado', no_show: 'No se presentó' };
+
+  async function callNext() {
+    const btn = $('#nextBtn');
+    btn.disabled = true;
+    try {
+      const r = await api('PATCH', `/api/stores/${selected._id}/queue/next`);
+      toast(`Llamando al turno #${r.currentTicket.ticketNumber}`, 'ok');
+    } catch (e) { toast(e.message, 'err'); }
+    await refreshStatus();
+  }
+
+  async function authSubmit(e, path, msg) {
+    e.preventDefault();
+    const body = Object.fromEntries(new FormData(e.target));
+    try {
+      const r = await api('POST', path, body);
+      e.target.reset();
+      saveSession({ token: r.token, user: r.user });
+      toast(msg(r.user), 'ok');
+    } catch (err) { toast(err.message, 'err'); }
+  }
+  $('#loginForm').addEventListener('submit', e => authSubmit(e, '/api/auth/login', u => `Bienvenido, ${u.name}`));
+  $('#registerForm').addEventListener('submit', e => authSubmit(e, '/api/auth/register', u => `Cuenta creada para ${u.name}`));
 
   async function join() {
     const btn = $('#joinBtn');
@@ -281,6 +368,7 @@
     } catch (err) { toast(err.message, 'err'); }
   });
 
+  renderSession();
   checkHealth();
   loadStores();
   setInterval(checkHealth, 10000);

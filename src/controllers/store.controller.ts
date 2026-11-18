@@ -1,9 +1,10 @@
 import { Request, Response } from "express";
 import { storeService } from "../services/store.service";
+import { getAuth } from "../middlewares/auth";
 
 export const storeController = {
   async create(req: Request, res: Response) {
-    const store = await storeService.registerStore(req.body);
+    const store = await storeService.registerStore(req.body, getAuth(res).sub);
     res.status(201).json(store);
   },
 

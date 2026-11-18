@@ -10,7 +10,8 @@ app.use(cors());
 app.use(express.json());
 
 app.get("/", (_req, res) => {
-  res.sendFile(path.join(__dirname, "..", "index.html"));
+  // Desde la raíz del proyecto, para que funcione igual con `npm run dev` y con el build.
+  res.sendFile(path.resolve(process.cwd(), "index.html"));
 });
 
 app.get("/health", (_req, res) => {
@@ -21,4 +22,4 @@ app.use("/api", routes);
 
 app.use(errorHandler);
 
-export default app;
+export default app;

@@ -2,6 +2,8 @@ import request from "supertest";
 import app from "../src/app";
 import { queueRepository } from "../src/repositories/queue.repository";
 import { storeRepository } from "../src/repositories/store.repository";
+import { AppError } from "../src/types/type";
+import { bearer, OPERATOR_ID, OTHER_ADMIN_ID, OWNER_ID } from "./helpers/auth";
 
 jest.mock("../src/repositories/queue.repository");
 jest.mock("../src/repositories/store.repository");
@@ -10,79 +12,144 @@ const mockedQueueRepository = jest.mocked(queueRepository);
 const mockedStoreRepository = jest.mocked(storeRepository);
 
 const storeId = "665f1c2e8b3a4d0012345678";
+const otherStoreId = "665f1c2e8b3a4d0099999999";
 const ticketId = "665f1c2e8b3a4d0087654321";
+
+const OWNER = bearer("admin", OWNER_ID);
+const OTHER_ADMIN = bearer("admin", OTHER_ADMIN_ID);
+const OPERATOR = bearer("operator", OPERATOR_ID, storeId);
+const OTHER_OPERATOR = bearer("operator", OPERATOR_ID, otherStoreId);
 
 beforeEach(() => {
 	jest.resetAllMocks();
-	mockedStoreRepository.findById.mockResolvedValue({ _id: storeId } as any);
+	mockedStoreRepository.findById.mockResolvedValue({ _id: storeId, ownerId: OWNER_ID } as any);
+});
+
+describe("Feature 4: seguridad de las operaciones de atención", () => {
+	it("devuelve 401 al llamar al siguiente turno sin token", async () => {
+		const response = await request(app).patch(`/api/stores/${storeId}/queue/next`);
+
+		expect(response.status).toBe(401);
+		expect(mockedQueueRepository.advanceQueue).not.toHaveBeenCalled();
+	});
+
+	it("devuelve 403 si un admin intenta avanzar la fila de una tienda que no es suya", async () => {
+		const response = await request(app)
+			.patch(`/api/stores/${storeId}/queue/next`)
+			.set("Authorization", OTHER_ADMIN);
+
+		expect(response.status).toBe(403);
+		expect(mockedQueueRepository.advanceQueue).not.toHaveBeenCalled();
+	});
+
+	it("devuelve 403 si un operador intenta gestionar otra tienda", async () => {
+		const response = await request(app)
+			.patch(`/api/stores/${storeId}/tickets/${ticketId}`)
+			.set("Authorization", OTHER_OPERATOR)
+			.send({ status: "cancelled" });
+
+		expect(response.status).toBe(403);
+		expect(mockedQueueRepository.updateTicketStatus).not.toHaveBeenCalled();
+	});
+
+	it("permite al operador asignado avanzar la fila de su tienda", async () => {
+		mockedQueueRepository.advanceQueue.mockResolvedValue({
+			previousTicket: null,
+			currentTicket: { ticketNumber: 1, status: "serving" },
+		});
+
+		const response = await request(app)
+			.patch(`/api/stores/${storeId}/queue/next`)
+			.set("Authorization", OPERATOR);
+
+		expect(response.status).toBe(200);
+	});
+
+	it("devuelve 401 al cambiar el estado de un turno sin token", async () => {
+		const response = await request(app)
+			.patch(`/api/stores/${storeId}/tickets/${ticketId}`)
+			.send({ status: "cancelled" });
+
+		expect(response.status).toBe(401);
+	});
 });
 
 describe("Feature 4: atender el siguiente turno", () => {
 	it("llama al siguiente turno y finaliza el que estaba en atención", async () => {
-		mockedQueueRepository.findServingTicket.mockResolvedValue({
-			_id: "prev-id",
-			ticketNumber: 1,
-			status: "en atención",
-		} as any);
-		mockedQueueRepository.takeNextWaitingTicket.mockResolvedValue({
-			_id: "next-id",
-			ticketNumber: 2,
-			status: "en atención",
-		} as any);
-		mockedQueueRepository.updateTicketStatus.mockResolvedValue({
-			_id: "prev-id",
-			ticketNumber: 1,
-			status: "completado",
-		} as any);
+		mockedQueueRepository.advanceQueue.mockResolvedValue({
+			previousTicket: { _id: "prev-id", ticketNumber: 1, status: "completed" },
+			currentTicket: { _id: "next-id", ticketNumber: 2, status: "serving" },
+		});
 
-		const response = await request(app).patch(`/api/stores/${storeId}/queue/next`);
+		const response = await request(app)
+			.patch(`/api/stores/${storeId}/queue/next`)
+			.set("Authorization", OWNER);
 
 		expect(response.status).toBe(200);
 		expect(response.body.currentTicket.ticketNumber).toBe(2);
-		expect(response.body.previousTicket.status).toBe("completado");
-		expect(mockedQueueRepository.updateTicketStatus).toHaveBeenCalledWith(
-			"prev-id",
-			"en atención",
-			"completado"
-		);
+		expect(response.body.previousTicket.status).toBe("completed");
+		expect(mockedQueueRepository.advanceQueue).toHaveBeenCalledWith(storeId);
 	});
 
 	it("llama al primer turno cuando nadie está en atención", async () => {
-		mockedQueueRepository.findServingTicket.mockResolvedValue(null);
-		mockedQueueRepository.takeNextWaitingTicket.mockResolvedValue({
-			_id: "next-id",
-			ticketNumber: 1,
-			status: "en atención",
-		} as any);
+		mockedQueueRepository.advanceQueue.mockResolvedValue({
+			previousTicket: null,
+			currentTicket: { _id: "next-id", ticketNumber: 1, status: "serving" },
+		});
 
-		const response = await request(app).patch(`/api/stores/${storeId}/queue/next`);
+		const response = await request(app)
+			.patch(`/api/stores/${storeId}/queue/next`)
+			.set("Authorization", OWNER);
 
 		expect(response.status).toBe(200);
 		expect(response.body.previousTicket).toBeNull();
-		expect(mockedQueueRepository.updateTicketStatus).not.toHaveBeenCalled();
 	});
 
-	it("devuelve 404 si no hay turnos en espera y no finaliza el turno actual", async () => {
-		mockedQueueRepository.findServingTicket.mockResolvedValue({
-			_id: "prev-id",
-			ticketNumber: 3,
-			status: "en atención",
-		} as any);
-		mockedQueueRepository.takeNextWaitingTicket.mockResolvedValue(null);
+	it("devuelve 404 si no hay turnos en espera", async () => {
+		mockedQueueRepository.advanceQueue.mockResolvedValue(null);
 
-		const response = await request(app).patch(`/api/stores/${storeId}/queue/next`);
+		const response = await request(app)
+			.patch(`/api/stores/${storeId}/queue/next`)
+			.set("Authorization", OWNER);
 
 		expect(response.status).toBe(404);
-		expect(mockedQueueRepository.updateTicketStatus).not.toHaveBeenCalled();
+	});
+
+	it("devuelve 409 y no reporta éxito si la transacción se aborta", async () => {
+		mockedQueueRepository.advanceQueue.mockRejectedValue(
+			new AppError(409, "La fila cambió mientras se avanzaba, intenta de nuevo")
+		);
+
+		const response = await request(app)
+			.patch(`/api/stores/${storeId}/queue/next`)
+			.set("Authorization", OWNER);
+
+		expect(response.status).toBe(409);
+		expect(response.body.currentTicket).toBeUndefined();
+	});
+
+	it("devuelve 409 con mensaje de la fila si choca el índice de un solo turno en atención", async () => {
+		mockedQueueRepository.advanceQueue.mockRejectedValue(
+			Object.assign(new Error("E11000"), { code: 11000, keyPattern: { storeId: 1 } })
+		);
+
+		const response = await request(app)
+			.patch(`/api/stores/${storeId}/queue/next`)
+			.set("Authorization", OWNER);
+
+		expect(response.status).toBe(409);
+		expect(response.body.error).toMatch(/turno en atención/);
 	});
 
 	it("devuelve 404 si la tienda no existe", async () => {
 		mockedStoreRepository.findById.mockResolvedValue(null);
 
-		const response = await request(app).patch(`/api/stores/${storeId}/queue/next`);
+		const response = await request(app)
+			.patch(`/api/stores/${storeId}/queue/next`)
+			.set("Authorization", OWNER);
 
 		expect(response.status).toBe(404);
-		expect(mockedQueueRepository.takeNextWaitingTicket).not.toHaveBeenCalled();
+		expect(mockedQueueRepository.advanceQueue).not.toHaveBeenCalled();
 	});
 });
 
@@ -90,44 +157,47 @@ describe("Feature 4: cambiar el estado de un turno", () => {
 	it("cancela un turno en espera", async () => {
 		mockedQueueRepository.findTicketInStore.mockResolvedValue({
 			_id: ticketId,
-			status: "en espera",
+			status: "waiting",
 		} as any);
 		mockedQueueRepository.updateTicketStatus.mockResolvedValue({
 			_id: ticketId,
-			status: "cancelado",
+			status: "cancelled",
 		} as any);
 
 		const response = await request(app)
 			.patch(`/api/stores/${storeId}/tickets/${ticketId}`)
-			.send({ status: "cancelado" });
+			.set("Authorization", OWNER)
+			.send({ status: "cancelled" });
 
 		expect(response.status).toBe(200);
-		expect(response.body.status).toBe("cancelado");
+		expect(response.body.status).toBe("cancelled");
 		expect(mockedQueueRepository.updateTicketStatus).toHaveBeenCalledWith(
 			ticketId,
-			"en espera",
-			"cancelado"
+			"waiting",
+			"cancelled"
 		);
 	});
 
 	it("devuelve 409 para una transición no permitida", async () => {
 		mockedQueueRepository.findTicketInStore.mockResolvedValue({
 			_id: ticketId,
-			status: "cancelado",
+			status: "cancelled",
 		} as any);
 
 		const response = await request(app)
 			.patch(`/api/stores/${storeId}/tickets/${ticketId}`)
-			.send({ status: "completado" });
+			.set("Authorization", OWNER)
+			.send({ status: "completed" });
 
 		expect(response.status).toBe(409);
 		expect(mockedQueueRepository.updateTicketStatus).not.toHaveBeenCalled();
 	});
 
-	it("devuelve 400 si el estado no es válido", async () => {
+	it("devuelve 400 si el estado no es un valor permitido", async () => {
 		const response = await request(app)
 			.patch(`/api/stores/${storeId}/tickets/${ticketId}`)
-			.send({ status: "en espera" });
+			.set("Authorization", OWNER)
+			.send({ status: "cancelado" });
 
 		expect(response.status).toBe(400);
 	});
@@ -135,7 +205,8 @@ describe("Feature 4: cambiar el estado de un turno", () => {
 	it("devuelve 400 para un identificador de turno inválido", async () => {
 		const response = await request(app)
 			.patch(`/api/stores/${storeId}/tickets/id-invalido`)
-			.send({ status: "completado" });
+			.set("Authorization", OWNER)
+			.send({ status: "completed" });
 
 		expect(response.status).toBe(400);
 	});
@@ -145,7 +216,8 @@ describe("Feature 4: cambiar el estado de un turno", () => {
 
 		const response = await request(app)
 			.patch(`/api/stores/${storeId}/tickets/${ticketId}`)
-			.send({ status: "completado" });
+			.set("Authorization", OWNER)
+			.send({ status: "completed" });
 
 		expect(response.status).toBe(404);
 	});
