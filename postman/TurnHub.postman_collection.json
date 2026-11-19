@@ -851,6 +851,51 @@
           ]
         },
         {
+          "name": "Lista de turnos del personal (en espera y en atención)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/stores/{{storeId}}/tickets?status=waiting,serving",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "stores",
+                "{{storeId}}",
+                "tickets"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "waiting,serving"
+                }
+              ]
+            },
+            "description": "Solo personal de la tienda. Devuelve los turnos en orden de llegada con su statusLabel. `status` es opcional (lista separada por comas)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Solo turnos en espera o en atención', () => body.forEach(t => pm.expect(['waiting', 'serving']).to.include(t.status)));",
+                  "pm.test('Ordenados por número de turno', () => body.forEach((t, i) => i && pm.expect(t.ticketNumber).to.be.above(body[i - 1].ticketNumber)));"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Cancelar turno en espera",
           "request": {
             "method": "PATCH",

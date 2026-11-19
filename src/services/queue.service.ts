@@ -5,6 +5,7 @@ import { ALLOWED_TRANSITIONS, TICKET_STATUS, TICKET_STATUS_LABELS, TicketStatus 
 import { AppError, QueueStatsDTO } from "../types/type";
 
 const MAX_TICKET_CREATION_ATTEMPTS = 5;
+const MAX_LISTED_TICKETS = 200;
 
 function validateStoreId(storeId: string) {
 	if (!isValidObjectId(storeId)) {
@@ -137,6 +138,26 @@ export const queueService = {
 			calledAt: ticket.calledAt,
 			finishedAt: ticket.finishedAt,
 		};
+	},
+
+	// Feature 4: lista de turnos para el panel del personal (para poder cancelar o cerrar turnos).
+	async listTickets(storeId: string, statusQuery?: string) {
+		await ensureStoreExists(storeId);
+		let statuses: TicketStatus[] | null = null;
+		if (statusQuery) {
+			const valid = Object.values(TICKET_STATUS) as string[];
+			const requested = statusQuery.split(",").map((s) => s.trim()).filter(Boolean);
+			const invalid = requested.filter((s) => !valid.includes(s));
+			if (invalid.length) {
+				throw new AppError(400, `Estado inválido: ${invalid.join(", ")}. Usa: ${valid.join(", ")}`);
+			}
+			statuses = requested as TicketStatus[];
+		}
+		const tickets = await queueRepository.listTickets(storeId, statuses, MAX_LISTED_TICKETS);
+		return tickets.map((t) => ({
+			...t,
+			statusLabel: TICKET_STATUS_LABELS[t.status as TicketStatus],
+		}));
 	},
 
 	// Feature 4: cambia manualmente el estado de un turno respetando las transiciones permitidas.

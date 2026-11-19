@@ -36,6 +36,7 @@ router.get("/:storeId/tickets/:ticketId", queueController.getTicket); // Feature
 
 // Protegido (Feature 4)
 router.patch("/:storeId/queue/next", ...storeStaff, queueController.callNext);
+router.get("/:storeId/tickets", ...storeStaff, queueController.listTickets);
 router.patch(
 	"/:storeId/tickets/:ticketId",
 	...storeStaff,

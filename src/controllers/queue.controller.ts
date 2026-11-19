@@ -32,6 +32,12 @@ export const queueController = {
 		res.status(200).json(result);
 	},
 
+	async listTickets(req: Request, res: Response) {
+		const status = typeof req.query.status === "string" ? req.query.status : undefined;
+		const tickets = await queueService.listTickets(String(req.params.storeId), status);
+		res.status(200).json(tickets);
+	},
+
 	async updateTicketStatus(req: Request, res: Response) {
 		const ticket = await queueService.updateTicketStatus(
 			String(req.params.storeId),
