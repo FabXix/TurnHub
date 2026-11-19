@@ -27,3 +27,7 @@ Thumbs.db
 .tmp/
 .temp/
 *.tsbuildinfo
+
+# Archivos locales de la app de Postman
+.postman/
+postman/globals/
