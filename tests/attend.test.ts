@@ -222,3 +222,47 @@ describe("Feature 4: cambiar el estado de un turno", () => {
 		expect(response.status).toBe(404);
 	});
 });
+
+describe("Feature 4: lista de turnos para el personal", () => {
+	it("devuelve 401 sin token", async () => {
+		const response = await request(app).get(`/api/stores/${storeId}/tickets`);
+
+		expect(response.status).toBe(401);
+		expect(mockedQueueRepository.listTickets).not.toHaveBeenCalled();
+	});
+
+	it("devuelve 403 si el operador es de otra tienda", async () => {
+		const response = await request(app)
+			.get(`/api/stores/${storeId}/tickets`)
+			.set("Authorization", OTHER_OPERATOR);
+
+		expect(response.status).toBe(403);
+	});
+
+	it("lista los turnos filtrados por estado con su etiqueta", async () => {
+		mockedQueueRepository.listTickets.mockResolvedValue([
+			{ _id: "a", ticketNumber: 3, status: "serving" },
+			{ _id: "b", ticketNumber: 4, status: "waiting" },
+		] as any);
+
+		const response = await request(app)
+			.get(`/api/stores/${storeId}/tickets?status=waiting,serving`)
+			.set("Authorization", OWNER);
+
+		expect(response.status).toBe(200);
+		expect(mockedQueueRepository.listTickets).toHaveBeenCalledWith(storeId, ["waiting", "serving"], 200);
+		expect(response.body).toEqual([
+			expect.objectContaining({ ticketNumber: 3, statusLabel: "En atención" }),
+			expect.objectContaining({ ticketNumber: 4, statusLabel: "En espera" }),
+		]);
+	});
+
+	it("devuelve 400 con un estado inválido", async () => {
+		const response = await request(app)
+			.get(`/api/stores/${storeId}/tickets?status=foo`)
+			.set("Authorization", OPERATOR);
+
+		expect(response.status).toBe(400);
+		expect(mockedQueueRepository.listTickets).not.toHaveBeenCalled();
+	});
+});

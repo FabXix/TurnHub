@@ -32,7 +32,7 @@ Proyecto integrador del curso **Tecnologías de desarrollo en el servidor** (ITE
 
 ```mermaid
 flowchart TB
-    CLIENTE["Cliente (index.html / Postman)"] -->|"HTTP / REST"| ROUTES["Routes"]
+    CLIENTE["Cliente (interfaz web en /public / Postman)"] -->|"HTTP / REST"| ROUTES["Routes"]
     ROUTES --> MW["Middlewares<br/>auth, validación y errores"]
     MW --> CTRL["Controllers"]
     CTRL --> SVC["Services<br/>lógica de negocio"]
@@ -59,8 +59,10 @@ TurnHub/
 │   ├── app.ts           # configuración de Express
 │   └── server.ts        # punto de entrada
 ├── tests/               # Jest + Supertest
+├── public/              # interfaz web (SPA sin build) servida en "/"
+│   ├── css/styles.css
+│   └── js/              # app.js (rutas), api.js, state.js, ui.js, views/
 ├── postman/             # colección con todas las features
-├── index.html           # interfaz web servida en "/"
 ├── docker-compose.yml   # MongoDB 7 como replica set
 └── .env.example
 ```
@@ -148,7 +150,7 @@ docker compose up -d
 npm test
 ```
 
-44 casos con Jest + Supertest: validaciones, reglas de negocio, autenticación (`401`/`403`), permisos por tienda, reintentos del número de turno y manejo de la transacción de "siguiente turno". Estas pruebas mockean la capa de repositorio, así que no necesitan MongoDB. Para la entrega 3 se agregarán pruebas de integración contra una base de datos temporal.
+48 casos con Jest + Supertest: validaciones, reglas de negocio, autenticación (`401`/`403`), permisos por tienda, reintentos del número de turno y manejo de la transacción de "siguiente turno". Estas pruebas mockean la capa de repositorio, así que no necesitan MongoDB. Para la entrega 3 se agregarán pruebas de integración contra una base de datos temporal.
 
 ## API
 
@@ -166,6 +168,7 @@ Base: `http://localhost:3000/api`. 🔒 = requiere token.
 | POST | `/stores/:storeId/queue` | Público | 3 |
 | GET | `/stores/:storeId/queue` | Público | 3 |
 | PATCH | `/stores/:storeId/queue/next` | 🔒 admin dueño u operador de la tienda | 4 |
+| GET | `/stores/:storeId/tickets` | 🔒 admin dueño u operador de la tienda | 4 |
 | PATCH | `/stores/:storeId/tickets/:ticketId` | 🔒 admin dueño u operador de la tienda | 4 |
 | GET | `/stores/:storeId/tickets/:ticketId` | Público | 5 |
 | GET | `/stores/:storeId/queue/stats` | Público | 6 |
@@ -238,6 +241,8 @@ Todos los errores responden `{ "error": "mensaje", "details"?: [...] }`.
 
 `previousTicket` es `null` si nadie estaba en atención. `404` si no hay turnos en espera (no se modifica nada) · `409` si la fila cambió durante la operación · `401`/`403` sin permiso.
 
+**`GET /api/stores/:storeId/tickets?status=waiting,serving`**: lista los turnos de la tienda en orden de llegada (máximo 200), cada uno con su `statusLabel`. `status` es opcional y acepta varios estados separados por comas. Es lo que usa el panel de atención para cancelar o cerrar turnos. `200` · `400` estado inválido · `401`/`403` sin permiso.
+
 **`PATCH /api/stores/:storeId/tickets/:ticketId`**: `{ "status": "completed" | "cancelled" | "no_show" }` → `200` con el turno actualizado · `400` estado o id inválido · `404` turno inexistente en esa tienda · `409` transición no permitida · `401`/`403` sin permiso.
 
 ### Feature 5: consultar mi turno
@@ -269,6 +274,35 @@ Todos los errores responden `{ "error": "mensaje", "details"?: [...] }`.
 ```
 
 El promedio usa los últimos 20 turnos completados. Si no hay datos, los tiempos son `null`. `400` id inválido · `404` tienda inexistente.
+
+## Interfaz web
+
+Con el servidor corriendo, abre `http://localhost:3000/`. Es una SPA en JavaScript puro (sin paso de build) dentro de `public/`, servida por `express.static`. Navega con rutas hash, así que cada pantalla tiene su propio enlace.
+
+### Flujo del cliente (sin cuenta)
+
+| Pantalla | Ruta | Features |
+| --- | --- | --- |
+| Negocios: lista con buscador y personas en espera de cada uno | `#/` | 1, 3 |
+| Negocio: datos, fila en vivo, estadísticas y botón **Tomar turno** | `#/tienda/:id` | 1, 3, 6 |
+| Mi turno: número, posición, personas delante y espera aproximada. Avisa con sonido y vibración cuando lo llaman | `#/turno/:storeId/:ticketId` | 5, 6 |
+| Mis turnos: los turnos tomados en este dispositivo (se guardan en `localStorage`) | `#/mis-turnos` | 5 |
+| Pantalla de turnos para una TV del negocio | `#/pantalla/:id` | 3, 6 |
+
+### Flujo del negocio
+
+1. **Acceso negocios** (`#/acceso`): el dueño crea su cuenta (admin) o inicia sesión. El recepcionista solo inicia sesión.
+2. **Mi panel** (`#/panel`, solo admin): sus negocios con la fila en vivo y el formulario para registrar uno nuevo (Feature 2).
+3. **Panel de atención** (`#/gestionar/:id`, admin dueño u operador de esa tienda):
+   - **Llamar siguiente turno**: completa el que estaba en atención y llama al siguiente (Feature 4).
+   - Sobre el turno en atención: **Atendido** o **No se presentó**.
+   - En la lista de espera: **Cancelar** (pide confirmar con un segundo clic).
+   - Estadísticas de la fila (Feature 6).
+   - Solo el admin: **crear recepcionistas** para esa tienda.
+
+El operador entra directo al panel de su tienda. Si intenta abrir otra tienda, la interfaz muestra el mensaje de falta de permiso (la API responde `403`). Si el token expira, se cierra la sesión y se vuelve a pedir el login.
+
+**Para probarlo de punta a punta:** abre el panel de atención en una ventana, la vista del cliente o "Mi turno" en otra (o en el celular, en la misma red) y la pantalla de turnos en una tercera. Todas se actualizan solas cada pocos segundos.
 
 ## Postman
 

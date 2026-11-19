@@ -91,6 +91,13 @@ export const queueRepository = {
 		};
 	},
 
+	// Lista los turnos de una tienda (opcionalmente filtrados por estado) en orden de llegada.
+	listTickets(storeId: string, statuses: TicketStatus[] | null, limit: number) {
+		const filter: Record<string, unknown> = { storeId };
+		if (statuses && statuses.length) filter.status = { $in: statuses };
+		return Ticket.find(filter).sort({ ticketNumber: 1 }).limit(limit).lean();
+	},
+
 	findTicketInStore(storeId: string, ticketId: string) {
 		return Ticket.findOne({ _id: ticketId, storeId });
 	},
